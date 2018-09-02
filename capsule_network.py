@@ -1,29 +1,29 @@
-from tensorflow.examples.tutorials.mnist import input_data
-import matplotlib.pyplot as plt
-import tensorflow as tf
-import numpy as np
+#
+# Shashank Manjunath
+# 9/1/2018
+# Implements "Dynamic Routing Between Capsules"
+# https://arxiv.org/pdf/1710.09829.pdf
+#
+
+import torch.nn.functional as F
+import torch.nn as nn
+import torch
 
 
-np.random.seed(2018)
-
-
-class CapsuleNetwork:
-    """Class that implements a capsule network on MNIST"""
+class Net(nn.Module):
     def __init__(self):
-        self.X = tf.placeholder(shape=[None, 28, 28, 1], dtype=tf.float32, name="X")
+        super(Net, self).__init__()
+        self.conv1 = nn.Conv2d(1, 10, kernel_size=5)
+        self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
+        self.conv2d_drop = nn.Dropout2d()
+        self.fc1 = nn.Linear(320, 50)
+        self.fc2 = nn.Linear(50, 10)
 
-
-if __name__ == "__main__":
-    mnist = input_data.read_data_sets("../capsnet/data/")
-
-    n_samples = 5
-
-    plt.figure(figsize=(n_samples * 2, 3))
-
-    for index in range(n_samples):
-        plt.subplot(1, n_samples, index+1)
-        sample_image = mnist.train.images[index].reshape(28, 28)
-        plt.imshow(sample_image, cmap="binary")
-        plt.axis("off")
-
-    plt.show()
+    def forward(self, x):
+        x = F.relu(F.max_pool2d(self.conv1(x), 2))
+        x = F.relu(F.max_pool2d(self.conv2d_drop(self.conv2(x)), 2))
+        x = x.view(-1, 320)
+        x = F.relu(self.fc1(x))
+        x = F.dropout(x, training=self.training)
+        x = self.fc2(x)
+        return F.log_softmax(x, dim=1)
