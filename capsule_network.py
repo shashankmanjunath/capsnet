@@ -7,7 +7,7 @@
 
 from torchvision import datasets, transforms
 import torch.nn.functional as F
-from capsule_layers import Net
+from baseline_network import BaselineNetwork
 import torch.optim as optim
 import torch.nn as nn
 import numpy as np
