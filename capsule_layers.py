@@ -76,7 +76,7 @@ class DigitCapsLayer(nn.Module):
             priors_inter_size = priors_inter_size * priors.shape[idx]
         priors = priors.reshape(priors.shape[0], priors_inter_size, priors.shape[-1])
 
-        b = torch.autograd.Variable(torch.zeros(priors.size())).cuda()
+        b = torch.autograd.Variable(torch.zeros(priors.size()), requires_grad=True).cuda()
 
         for iter in range(self.num_routing_iter):
             # Step 1
@@ -158,7 +158,7 @@ class CapsuleNetwork(nn.Module):
         x = x.reshape(self.batch_size, int(x.shape[0] / self.batch_size), x.shape[1])
         x = torch.norm(x, p=2, dim=-1)
         x = x.max(-1)[1]
-        x = x.reshape(1, self.batch_size)[0]
+        x = x.reshape(self.batch_size, 1)
 
         # Layers if we want to do reconstruction
         # x = x.reshape(self.batch_size, 160)

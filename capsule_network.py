@@ -16,7 +16,7 @@ import torch
 import time
 
 
-BATCH_SIZE = 2
+BATCH_SIZE = 256
 DISP_ITER = 1
 NUM_EPOCH = 100
 
@@ -24,7 +24,9 @@ NUM_EPOCH = 100
 def run_train_iter(data, target, model, optimizer):
     optimizer.zero_grad()
     output = model(data)
-    loss = nn.MSELoss(output, target)
+    output = torch.autograd.Variable(output.data.float(), requires_grad=True)
+
+    loss = F.nll_loss(output, target)
 
     loss.backward()
     optimizer.step()
