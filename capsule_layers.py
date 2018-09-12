@@ -30,7 +30,7 @@ class PrimaryCapsLayer(nn.Module):
                 kernel_size=(self.kernel_size, self.kernel_size),
                 stride=2,
                 padding=0,
-            )]
+            ).cuda()]
 
     def forward(self, x):
         x = [conv(x) for conv in self.conv_list]
@@ -47,25 +47,24 @@ class PrimaryCapsLayer(nn.Module):
 
 class DigitCapsLayer(nn.Module):
     """ Implements a DigitCaps layer """
-    def __init__(self, in_channels, out_channels, num_capsules, capsule_length, num_classes, num_routing_iter):
+    def __init__(self, in_channels, num_capsules, capsule_length, num_classes, num_routing_iter):
         super(DigitCapsLayer, self).__init__()
         self.in_channels = in_channels
-        self.out_channels = out_channels
         self.num_capsules = num_capsules
         self.capsule_length = capsule_length
         self.num_classes = num_classes
         self.num_routing_iter = num_routing_iter
 
         self.weight = nn.Parameter(torch.randn(
-            32,
-            6,
-            8,
-            8,
+            self.num_capsules,      # 32
+            self.in_channels,       # 6
+            self.capsule_length,    # 8
+            self.capsule_length,    # 8
         ))
 
         self.digit_weights = []
         for idx in range(self.num_classes):
-            self.digit_weights += [nn.Parameter(torch.randn(8, 16))]
+            self.digit_weights += [nn.Parameter(torch.randn(self.capsule_length, 16)).cuda()]
 
     def forward(self, x):
         priors = x @ self.weight  # Matrix multiplication
@@ -77,7 +76,7 @@ class DigitCapsLayer(nn.Module):
             priors_inter_size = priors_inter_size * priors.shape[idx]
         priors = priors.reshape(priors.shape[0], priors_inter_size, priors.shape[-1])
 
-        b = torch.autograd.Variable(torch.zeros(priors.size()))
+        b = torch.autograd.Variable(torch.zeros(priors.size())).cuda()
 
         for iter in range(self.num_routing_iter):
             # Step 1
@@ -136,16 +135,15 @@ class CapsuleNetwork(nn.Module):
             out_channels=32,
             num_capsules=6,
             capsule_length=8,
-            num_routing_iter=3,
+            num_routing_iter=self.num_routing_iter,
         )
 
         self.digit_caps = DigitCapsLayer(
-            in_channels=8,
-            out_channels=16,
+            in_channels=6,
             num_capsules=32,
-            capsule_length=32*6*6,
+            capsule_length=8,
             num_classes=10,
-            num_routing_iter=3,
+            num_routing_iter=self.num_routing_iter,
         )
         self.linear_1 = nn.Linear(16*10, 512)
         self.linear_2 = nn.Linear(512, 1024)
@@ -156,12 +154,18 @@ class CapsuleNetwork(nn.Module):
         x = self.caps_1(x)
         x = self.digit_caps(x)
 
-        x = x.reshape(self.batch_size, 160)
+        # Layers if we want to do classification
+        x = x.reshape(self.batch_size, int(x.shape[0] / self.batch_size), x.shape[1])
+        x = torch.norm(x, p=2, dim=-1)
+        x = x.max(-1)[1]
+        x = x.reshape(1, self.batch_size)[0]
 
-        x = F.relu(self.linear_1(x))
-        x = F.relu(self.linear_2(x))
-        x = torch.sigmoid(self.linear_3(x))
-        x = x.reshape(28, 28)
+        # Layers if we want to do reconstruction
+        # x = x.reshape(self.batch_size, 160)
+        # x = F.relu(self.linear_1(x))
+        # x = F.relu(self.linear_2(x))
+        # x = torch.sigmoid(self.linear_3(x))
+        # x = x.reshape(28, 28)
         return x
 
 

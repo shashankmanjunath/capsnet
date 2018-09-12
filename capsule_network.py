@@ -8,6 +8,7 @@
 from torchvision import datasets, transforms
 import torch.nn.functional as F
 from baseline_network import BaselineNetwork
+from capsule_layers import CapsuleNetwork
 import torch.optim as optim
 import torch.nn as nn
 import numpy as np
@@ -15,7 +16,7 @@ import torch
 import time
 
 
-BATCH_SIZE = 8192
+BATCH_SIZE = 2
 DISP_ITER = 1
 NUM_EPOCH = 100
 
@@ -23,7 +24,7 @@ NUM_EPOCH = 100
 def run_train_iter(data, target, model, optimizer):
     optimizer.zero_grad()
     output = model(data)
-    loss = F.nll_loss(output, target)
+    loss = nn.MSELoss(output, target)
 
     loss.backward()
     optimizer.step()
@@ -40,7 +41,7 @@ def run_eval_iter(test_loader, model):
 
             output = model(data)
 
-            full_loss += [F.nll_loss(output, target)]
+            full_loss += [F.l2_loss(output, target)]
             full_acc += [accuracy(output, target)]
 
     return np.mean(full_acc), np.mean(full_loss)
@@ -81,7 +82,7 @@ def train():
 
     device = torch.device("cuda:0")
 
-    model = Net()
+    model = CapsuleNetwork(batch_size=BATCH_SIZE, num_routing_iter=3)
     model.cuda()
 
     optimizer = optim.Adam(params=model.parameters(), lr=1e-4)
