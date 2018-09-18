@@ -6,9 +6,10 @@
 #
 
 from torchvision import datasets, transforms
-import torch.nn.functional as F
 from baseline_network import BaselineNetwork
 from capsule_layers import CapsuleNetwork
+from capsule_loss import CapsuleLoss
+import torch.nn.functional as F
 import torch.optim as optim
 import torch.nn as nn
 import numpy as np
@@ -21,31 +22,28 @@ DISP_ITER = 1
 NUM_EPOCH = 100
 
 
-def run_train_iter(data, target, model, optimizer):
+def run_train_iter(data, target, model, optimizer, loss_func):
     optimizer.zero_grad()
-    output = model(data)
-    output = torch.autograd.Variable(output.data.float(), requires_grad=True)
+    output_classification, output_reconstruction = model(data)
 
-    loss = F.nll_loss(output, target)
-
+    loss = loss_func(data, target, output_classification, output_reconstruction)
     loss.backward()
     optimizer.step()
-    return output, loss
+    return output_classification, loss
 
 
-def run_eval_iter(test_loader, model):
+def run_eval_iter(test_loader, model, loss_func):
     full_acc = []
     full_loss = []
 
     with torch.no_grad():
-        for _, (data, target) in enumerate(test_loader):
+        for eval_idx, (data, target) in enumerate(test_loader):
             data, target = data.cuda(), target.cuda()
 
-            output = model(data)
+            output_classification, output_reconstruction = model(data)
 
-            full_loss += [F.l2_loss(output, target)]
-            full_acc += [accuracy(output, target)]
-
+            full_loss += [loss_func(data, target, output_classification, output_reconstruction)]
+            full_acc += [accuracy(output_classification, target)]
     return np.mean(full_acc), np.mean(full_loss)
 
 
@@ -67,6 +65,7 @@ def train():
         ),
         batch_size=BATCH_SIZE,
         shuffle=True,
+        drop_last=True,
     )
 
     test_loader = torch.utils.data.DataLoader(
@@ -80,14 +79,16 @@ def train():
         ),
         shuffle=False,
         batch_size=BATCH_SIZE,
+        drop_last=True,
     )
 
-    device = torch.device("cuda:0")
+    # device = torch.device("cuda:0")
 
     model = CapsuleNetwork(batch_size=BATCH_SIZE, num_routing_iter=3)
     model.cuda()
 
-    optimizer = optim.Adam(params=model.parameters(), lr=1e-4)
+    optimizer = optim.Adam(params=model.parameters())
+    capsule_loss = CapsuleLoss()
 
     for epoch in range(NUM_EPOCH):
         t_start = time.time()
@@ -95,7 +96,7 @@ def train():
             data, target = data.cuda(), target.cuda()
 
             t1 = time.time()
-            output, loss = run_train_iter(data, target, model, optimizer)
+            output, loss = run_train_iter(data, target, model, optimizer, capsule_loss)
             t2 = time.time()
 
             if batch_idx % DISP_ITER == 0 or batch_idx == (len(train_loader) - 1):
@@ -117,7 +118,7 @@ def train():
         print("", end="\n")
         t_end = time.time()
 
-        test_acc, test_loss = run_eval_iter(test_loader, model)
+        test_acc, test_loss = run_eval_iter(test_loader, model, capsule_loss)
 
         print(
             "Test Accuracy: {test_acc:.3f}\tTest Loss: {loss:.3f}\tEpoch Runtime: {runtime:.3f}".format(

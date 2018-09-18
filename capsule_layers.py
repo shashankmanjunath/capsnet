@@ -119,7 +119,6 @@ class CapsuleNetwork(nn.Module):
         super(CapsuleNetwork, self).__init__()
         self.batch_size = batch_size
         self.num_routing_iter = num_routing_iter
-
         self.kernel_size = 9
 
         self.conv1 = nn.Conv2d(
@@ -155,27 +154,15 @@ class CapsuleNetwork(nn.Module):
         x = self.digit_caps(x)
 
         # Layers if we want to do classification
-        x = x.reshape(self.batch_size, int(x.shape[0] / self.batch_size), x.shape[1])
-        x = torch.norm(x, p=2, dim=-1)
-        x = x.max(-1)[1]
-        x = x.reshape(self.batch_size, 1)
+        x_class = x.reshape(self.batch_size, int(x.shape[0] / self.batch_size), x.shape[1])
+        x_class = torch.norm(x_class, p=2, dim=-1)
+        x_class = x_class.max(-1)[1]
+        x_class = x_class.reshape(self.batch_size, 1)
 
         # Layers if we want to do reconstruction
-        # x = x.reshape(self.batch_size, 160)
-        # x = F.relu(self.linear_1(x))
-        # x = F.relu(self.linear_2(x))
-        # x = torch.sigmoid(self.linear_3(x))
-        # x = x.reshape(28, 28)
-        return x
-
-
-if __name__ == "__main__":
-    x = torch.rand(1, 1, 28, 28)
-
-    model = CapsuleNetwork(
-        batch_size=1,
-        num_routing_iter=3,
-    )
-
-    model.forward(x)
-    print(x.shape)
+        x_recon = x.reshape(self.batch_size, 160)
+        x_recon = F.relu(self.linear_1(x_recon))
+        x_recon = F.relu(self.linear_2(x_recon))
+        x_recon = torch.sigmoid(self.linear_3(x_recon))
+        x_recon = x_recon.reshape(self.batch_size, 28 * 28)
+        return x_class, x_recon
