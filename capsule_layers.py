@@ -24,18 +24,20 @@ class PrimaryCapsLayer(nn.Module):
         self.conv_list = []
 
         for _ in range(self.capsule_length):
-            self.conv_list += [nn.Conv2d(
-                in_channels=self.in_channels,
-                out_channels=self.out_channels,
-                kernel_size=(self.kernel_size, self.kernel_size),
-                stride=2,
-                padding=0,
-            ).cuda()]
+            self.conv_list += [
+                nn.Conv2d(
+                    in_channels=self.in_channels,
+                    out_channels=self.out_channels,
+                    kernel_size=(self.kernel_size, self.kernel_size),
+                    stride=2,
+                    padding=0,
+                ).cuda()
+            ]
+        self.conv_list = nn.ModuleList(self.conv_list)
 
     def forward(self, x):
         x = [conv(x) for conv in self.conv_list]
-        x = [torch.unsqueeze(t, -1) for t in x]
-        x = torch.cat(x, dim=-1)
+        x = torch.cat([t.reshape(t.shape[0], -1, 1) for t in x], dim=-1)  # Putting list of tensors into correct shape
         return self._squash(x)
 
     @staticmethod
@@ -47,19 +49,20 @@ class PrimaryCapsLayer(nn.Module):
 
 class DigitCapsLayer(nn.Module):
     """ Implements a DigitCaps layer """
-    def __init__(self, in_channels, num_capsules, capsule_length, num_classes, num_routing_iter):
+    def __init__(self, in_channels, out_channels, num_capsules, capsule_length, num_classes, num_routing_iter):
         super(DigitCapsLayer, self).__init__()
         self.in_channels = in_channels
+        self.out_channels = out_channels
         self.num_capsules = num_capsules
         self.capsule_length = capsule_length
         self.num_classes = num_classes
         self.num_routing_iter = num_routing_iter
 
         self.weight = nn.Parameter(torch.randn(
-            self.num_capsules,      # 32
-            self.in_channels,       # 6
+            self.num_capsules,      # 10
+            self.in_channels,       # 1152
             self.capsule_length,    # 8
-            self.capsule_length,    # 8
+            self.out_channels,      # 16
         ))
 
         self.digit_weights = []
@@ -67,50 +70,30 @@ class DigitCapsLayer(nn.Module):
             self.digit_weights += [nn.Parameter(torch.randn(self.capsule_length, 16)).cuda()]
 
     def forward(self, x):
-        priors = x @ self.weight  # Matrix multiplication
-
-        # Reshaping so that shape is (BATCH_SIZE, num_capsules, capsule_length)
-        priors_inter_size = 1
-
-        for idx in range(1, len(priors.shape)-1):
-            priors_inter_size = priors_inter_size * priors.shape[idx]
-        priors = priors.reshape(priors.shape[0], priors_inter_size, priors.shape[-1])
+        priors = x[None, :, :, None, :] @ self.weight[:, None, :, :, :]  # Matrix multiplication
 
         b = torch.autograd.Variable(torch.zeros(priors.size()), requires_grad=True).cuda()
 
         for iter in range(self.num_routing_iter):
             # Step 1
-            c = self._softmax(b)
+            c = F.softmax(b)
 
             # Step 2
             s_j = c * priors
-            s_j = s_j.sum(dim=1, keepdim=True)
+            s_j = s_j.sum(dim=2, keepdim=True)
 
             # Step 3
             v_j = self._squash(s_j)
 
             # Step 4
             b = b + (priors * v_j).sum(dim=-1, keepdim=True)
-
-        # Reshaping v_j to get rid of dimension 1
-        v_j = v_j.reshape(v_j.shape[0], v_j.shape[2])
-
-        # Getting interior size of v_j
-        digits = [F.relu(v_j @ weight) for weight in self.digit_weights]
-        digits = torch.cat(digits, dim=0)
-        return digits
+        return v_j
 
     @staticmethod
     def _squash(x):
         coeff = (x.norm() ** 2) / (1 + (x.norm() ** 2))
         v = coeff * (x / x.norm())
         return v
-
-    @staticmethod
-    def _softmax(x):
-        # Done this way for numerical stability
-        exp_val = torch.exp(x)
-        return exp_val / torch.sum(exp_val)
 
 
 class CapsuleNetwork(nn.Module):
@@ -138,8 +121,9 @@ class CapsuleNetwork(nn.Module):
         )
 
         self.digit_caps = DigitCapsLayer(
-            in_channels=6,
-            num_capsules=32,
+            in_channels=32 * 6 * 6,
+            out_channels=16,
+            num_capsules=10,
             capsule_length=8,
             num_classes=10,
             num_routing_iter=self.num_routing_iter,
@@ -149,18 +133,19 @@ class CapsuleNetwork(nn.Module):
         self.linear_3 = nn.Linear(1024, 784)
 
     def forward(self, x):
-        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv1(x), inplace=True)
         x = self.caps_1(x)
+        # TODO: Debug from here down
         x = self.digit_caps(x)
 
         # Layers if we want to do classification
-        x_class = x.reshape(self.batch_size, int(x.shape[0] / self.batch_size), x.shape[1])
-        x_class = torch.norm(x_class, p=2, dim=-1)
-        x_class = x_class.max(-1)[1]
-        x_class = x_class.reshape(self.batch_size, 1)
+        x_class = x.squeeze().transpose(0, 1)
+        x_class = torch.abs(x_class).sum(dim=-1)
+        x_class = F.softmax(x_class, dim=-1)
 
         # Layers if we want to do reconstruction
-        x_recon = x.reshape(self.batch_size, 160)
+        # TODO: Debug from here
+        x_recon = x.reshape(self.batch_size, 16*10)
         x_recon = F.relu(self.linear_1(x_recon))
         x_recon = F.relu(self.linear_2(x_recon))
         x_recon = torch.sigmoid(self.linear_3(x_recon))

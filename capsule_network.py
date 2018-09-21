@@ -5,28 +5,34 @@
 # https://arxiv.org/pdf/1710.09829.pdf
 #
 
+from capsule_layer_test import CapsuleNet
 from torchvision import datasets, transforms
-from baseline_network import BaselineNetwork
 from capsule_layers import CapsuleNetwork
 from capsule_loss import CapsuleLoss
-import torch.nn.functional as F
 import torch.optim as optim
-import torch.nn as nn
 import numpy as np
 import torch
 import time
 
 
-BATCH_SIZE = 256
+BATCH_SIZE = 32
 DISP_ITER = 1
-NUM_EPOCH = 100
+NUM_EPOCH = 1000
+
+
+torch.manual_seed(2018)
 
 
 def run_train_iter(data, target, model, optimizer, loss_func):
     optimizer.zero_grad()
     output_classification, output_reconstruction = model(data)
 
-    loss = loss_func(data, target, output_classification, output_reconstruction)
+    # Need to convert given target labels to onehot encoding
+    target_ = torch.unsqueeze(target, 1)
+    target_onehot = torch.cuda.FloatTensor(BATCH_SIZE, 10).zero_()
+    target_onehot.scatter_(1, target_, 1)
+
+    loss = loss_func(data, target_onehot, output_classification, output_reconstruction)
     loss.backward()
     optimizer.step()
     return output_classification, loss
@@ -42,7 +48,12 @@ def run_eval_iter(test_loader, model, loss_func):
 
             output_classification, output_reconstruction = model(data)
 
-            full_loss += [loss_func(data, target, output_classification, output_reconstruction)]
+            # Need to convert given target labels to onehot encoding
+            target_ = torch.unsqueeze(target, 1)
+            target_onehot = torch.cuda.FloatTensor(BATCH_SIZE, 10).zero_()
+            target_onehot.scatter_(1, target_, 1)
+
+            full_loss += [loss_func(data, target_onehot, output_classification, output_reconstruction)]
             full_acc += [accuracy(output_classification, target)]
     return np.mean(full_acc), np.mean(full_loss)
 
@@ -85,9 +96,14 @@ def train():
     # device = torch.device("cuda:0")
 
     model = CapsuleNetwork(batch_size=BATCH_SIZE, num_routing_iter=3)
+    # model = CapsuleNet()
     model.cuda()
-
     optimizer = optim.Adam(params=model.parameters())
+
+    model2 = CapsuleNet()
+    model2.cuda()
+    optimizer2 = optim.Adam(params=model2.parameters())
+
     capsule_loss = CapsuleLoss()
 
     for epoch in range(NUM_EPOCH):
@@ -97,13 +113,16 @@ def train():
 
             t1 = time.time()
             output, loss = run_train_iter(data, target, model, optimizer, capsule_loss)
+            # output2, loss2 = run_train_iter(data, target, model2, optimizer2, capsule_loss)
             t2 = time.time()
 
             if batch_idx % DISP_ITER == 0 or batch_idx == (len(train_loader) - 1):
                 acc = accuracy(output, target)
 
+                # print("\n")
+
                 print(
-                    "\r{epoch_idx} [{batch_idx}/{num_iter}]:\tAccuracy: {acc:.5f}\tLoss: {loss:.3f}\tRuntime: {runtime:.3f}".format(
+                    "\r1: {epoch_idx} [{batch_idx}/{num_iter}]:\tAccuracy: {acc:.5f}\tLoss: {loss:.3f}\tRuntime: {runtime:.3f}".format(
                         epoch_idx=epoch,
                         batch_idx=batch_idx+1,
                         num_iter=len(train_loader),
@@ -114,6 +133,22 @@ def train():
                     end="",
                     flush=True,
                 )
+
+                # print("\n")
+                # acc2 = accuracy(output2, loss2)
+                #
+                # print(
+                #     "\r2: {epoch_idx} [{batch_idx}/{num_iter}]:\tAccuracy: {acc:.5f}\tLoss: {loss:.3f}\tRuntime: {runtime:.3f}".format(
+                #         epoch_idx=epoch,
+                #         batch_idx=batch_idx+1,
+                #         num_iter=len(train_loader),
+                #         acc=acc2,
+                #         loss=loss2,
+                #         runtime=t2-t1,
+                #     ),
+                #     end="",
+                #     flush=True,
+                # )
 
         print("", end="\n")
         t_end = time.time()
