@@ -1,5 +1,5 @@
 <h1>CapsNet</h1>
-<h5>A simple implementation of <a href=https://arxiv.org/abs/1710.09829>Dynamic Routing Between Capsules</a> in Pytorch
+<h5>A simple implementation of <a href=https://arxiv.org/abs/1710.09829>Dynamic Routing Between Capsules</a> in Pytorch</h5>
 
 Shashank Manjunath  
 25 September 2018
