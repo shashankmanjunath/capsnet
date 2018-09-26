@@ -96,13 +96,11 @@ def train():
     # device = torch.device("cuda:0")
 
     model = CapsuleNetwork(batch_size=BATCH_SIZE, num_routing_iter=3)
-    # model = CapsuleNet()
     model.cuda()
     optimizer = optim.Adam(params=model.parameters())
 
     model2 = CapsuleNet()
     model2.cuda()
-    optimizer2 = optim.Adam(params=model2.parameters())
 
     capsule_loss = CapsuleLoss()
 
@@ -133,22 +131,6 @@ def train():
                     end="",
                     flush=True,
                 )
-
-                # print("\n")
-                # acc2 = accuracy(output2, loss2)
-                #
-                # print(
-                #     "\r2: {epoch_idx} [{batch_idx}/{num_iter}]:\tAccuracy: {acc:.5f}\tLoss: {loss:.3f}\tRuntime: {runtime:.3f}".format(
-                #         epoch_idx=epoch,
-                #         batch_idx=batch_idx+1,
-                #         num_iter=len(train_loader),
-                #         acc=acc2,
-                #         loss=loss2,
-                #         runtime=t2-t1,
-                #     ),
-                #     end="",
-                #     flush=True,
-                # )
 
         print("", end="\n")
         t_end = time.time()
