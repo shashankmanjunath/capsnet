@@ -120,7 +120,8 @@ def train():
                 # print("\n")
 
                 print(
-                    "\r1: {epoch_idx} [{batch_idx}/{num_iter}]:\tAccuracy: {acc:.5f}\tLoss: {loss:.3f}\tRuntime: {runtime:.3f}".format(
+                    "\rEpoch {epoch_idx}: [{batch_idx}/{num_iter}]:\tAccuracy: {acc:.5f}\tLoss: {loss:.3f}\tRuntime: "
+                    "{runtime:.3f}".format(
                         epoch_idx=epoch,
                         batch_idx=batch_idx+1,
                         num_iter=len(train_loader),

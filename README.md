@@ -8,4 +8,4 @@ A simple implementation of a capsule network.
 Run <code>python capsule_network.py</code> to run the network
 
 
-Credit to <a href=https://github.com/gram-ai/capsule-networks>Kenta Iwasaki and Gram.AI</a> for the margin loss code.
+Credit to <a href=https://github.com/gram-ai/capsule-networks>Kenta Iwasaki</a> for the margin loss code.
